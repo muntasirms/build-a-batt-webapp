@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Build a Batt - Flow Cell Generator</title>
+    <style>
+        :root {
+            --bg-main: #1e1e1e;
+            --bg-sidebar: #3F3F3F;
+            --accent-green: #23B14D;
+            --text-light: #f4f4f4;
+            --text-dark: #222;
+        }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; background: var(--bg-main); color: var(--text-light); }
+        
+        #sidebar { width: 380px; padding: 25px; background: var(--bg-sidebar); overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.5); z-index: 10; }
+        h2 { margin-top: 0; color: var(--accent-green); font-weight: 600; }
+        
+        details { background: rgba(0, 0, 0, 0.2); margin-bottom: 10px; border-radius: 6px; border-left: 3px solid var(--accent-green); }
+        summary { padding: 12px; cursor: pointer; font-weight: 600; user-select: none; }
+        summary:hover { background: rgba(255, 255, 255, 0.05); }
+        .details-content { padding: 15px; border-top: 1px solid rgba(255,255,255,0.1); }
+        
+        .form-group { margin-bottom: 12px; }
+        label { display: block; font-size: 0.85em; margin-bottom: 4px; color: #ccc; }
+        input[type="number"], input[type="text"], select { width: 100%; padding: 8px; box-sizing: border-box; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; }
+        input[type="number"]:focus { outline: none; border-color: var(--accent-green); }
+        
+        button { width: 100%; padding: 12px; background: var(--accent-green); color: white; border: none; border-radius: 6px; font-size: 1em; font-weight: bold; cursor: pointer; margin-top: 15px; transition: background 0.2s; }
+        button:hover { filter: brightness(1.1); }
+        input[type="range"] { width: 100%; margin: 10px 0; accent-color: var(--accent-green); }
+        
+        #viewer { flex-grow: 1; position: relative; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; font-size: 1.2em; color: var(--accent-green); }
+        
+        .checkbox-list { display: flex; flex-direction: column; gap: 8px; margin-top: 15px; }
+        .part-checkbox { display: flex; align-items: center; gap: 8px; font-size: 0.9em; font-weight: 500;}
+        .part-checkbox input { accent-color: var(--accent-green); cursor: pointer; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+<div id="sidebar">
+    <h2>Build a Batt</h2>
+    <form id="param-form">
+        
+        <details open>
+            <summary>Plate Dimensions & Area</summary>
+            <div class="details-content">
+                <div class="form-group"><label>Plate X (mm)</label><input type="number" step="0.1" id="plate_x" value="200.0"></div>
+                <div class="form-group"><label>Plate Y (mm)</label><input type="number" step="0.1" id="plate_y" value="200.0"></div>
+                <div class="form-group"><label>Flow Plate Z (mm)</label><input type="number" step="0.1" id="plate_z_flow" value="1.0"></div>
+                <div class="form-group"><label>Electrode X (mm)</label><input type="number" step="0.1" id="electrode_x" value="130.0"></div>
+                <div class="form-group"><label>Electrode Y (mm)</label><input type="number" step="0.1" id="electrode_y" value="130.0"></div>
+            </div>
+        </details>
+
+        <details>
+            <summary>Manifolds & Channels</summary>
+            <div class="details-content">
+                <div class="form-group"><label>Wall Thickness (mm)</label><input type="number" step="0.1" id="manifold_wall_thickness" value="0.0"></div>
+                <div class="form-group"><label>Manifold Max Width (mm)</label><input type="number" step="0.1" id="manifold_max_width" value="15.0"></div>
+                <div class="form-group"><label>Manifold Min Width (mm)</label><input type="number" step="0.1" id="manifold_min_width" value="10.0"></div>
+                <div class="form-group"><label>Distribution Length (mm)</label><input type="number" step="0.1" id="distribution_length" value="0.0"></div>
+                <div class="form-group"><label>Growth Rate</label><input type="number" step="0.01" id="distribution_growth_rate" value="0.05"></div>
+                <div class="form-group"><label>Rib Thickness (mm)</label><input type="number" step="0.1" id="rib_thickness" value="1.0"></div>
+                <div class="form-group"><label>Distribution Pattern</label>
+                    <select id="distribution_pattern">
+                        <option value="exp" selected>Exponential</option>
+                        <option value="arith">Arithmetic</option>
+                        <option value="power">Power</option>
+                    </select>
+                </div>
+            </div>
+        </details>
+
+        <details>
+            <summary>Hardware & Ports</summary>
+            <div class="details-content">
+                <div class="form-group"><label>Liquid Port Diameter (mm)</label><input type="number" step="0.1" id="liquid_port_diameter" value="10.0"></div>
+                <div class="form-group"><label>Port Inset Ratio</label><input type="number" step="0.01" id="port_inset_ratio" value="0.125"></div>
+                <div class="form-group"><label>Bolts Per Side</label><input type="number" id="bolts_per_side" value="3"></div>
+                <div class="form-group"><label>Bolt Diameter (mm)</label><input type="number" step="0.1" id="bolt_diameter" value="6.3"></div>
+                <div class="form-group"><label>Fillet Ratio</label><input type="number" step="0.01" id="fillet_ratio" value="0.04"></div>
+                
+                <div class="form-group"><label>Endplate X Offset (mm)</label><input type="number" step="0.1" id="endplate_x_offset" value="20.0"></div>
+                <div class="form-group"><label>Endplate Y Offset (mm)</label><input type="number" step="0.1" id="endplate_y_offset" value="20.0"></div>
+                <div class="form-group"><label>Gasket X Offset (mm)</label><input type="number" step="0.1" id="gasket_x_offset" value="0.0"></div>
+                <div class="form-group"><label>Gasket Y Offset (mm)</label><input type="number" step="0.1" id="gasket_y_offset" value="0.0"></div>
+                <div class="form-group"><label>CC X Offset (mm)</label><input type="number" step="0.1" id="current_collector_x_offset" value="0.0"></div>
+                <div class="form-group"><label>CC Y Offset (mm)</label><input type="number" step="0.1" id="current_collector_y_offset" value="0.0"></div>
+                <div class="form-group"><label>CC Tab Length (mm)</label><input type="number" step="0.1" id="current_collector_tab_length" value="50.0"></div>
+                <div class="form-group"><label>CC Tab Width (mm)</label><input type="number" step="0.1" id="current_collector_tab_width" value="30.0"></div>
+                <div class="form-group"><label>CC Tab Hole Radius (mm)</label><input type="number" step="0.1" id="current_collector_tab_hole_radius" value="4.15"></div>
+            </div>
+        </details>
+
+        <button type="submit" id="generate-btn">Generate Assembly</button>
+    </form>
+
+    <div id="parts-list" style="display: none; margin-top: 30px;">
+        <h3 style="border-bottom: 1px solid #555; padding-bottom: 10px;">Assembly View</h3>
+        <label style="color: white; font-weight: bold;">Explode Z-Axis: <span id="explode-val">0</span>mm</label>
+        <input type="range" id="explode-slider" min="0" max="150" value="0">
+        
+        <div class="checkbox-list" id="checkbox-container"></div>
+        
+        <button id="download-btn" style="background: #222; border: 1px solid var(--accent-green); margin-top: 20px;">Download STL, STEP & DXF Files</button>
+    </div>
+</div>
+
+<div id="viewer">
+    <div id="loading">Generating Models...</div>
+</div>
+
+<script>
+    const scene = new THREE.Scene();
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(100, -100, 200);
+    scene.add(dirLight);
+
+    const camera = new THREE.PerspectiveCamera(60, (window.innerWidth - 380) / window.innerHeight, 0.1, 2000);
+    camera.position.set(-300, -300, 400); 
+    camera.up.set(0, 0, 1);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth - 380, window.innerHeight);
+    document.getElementById('viewer').appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    
+    window.addEventListener('resize', () => {
+        camera.aspect = (window.innerWidth - 380) / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth - 380, window.innerHeight);
+    });
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    const assemblySequence = [
+        { id: 'ep_1', file: 'end_plate.stl', name: 'End Plate (Bottom)', colorHex: '#757575', colorNum: 0x757575 },
+        { id: 'ecc_1', file: 'endplate_cc.stl', name: 'Endplate CC', colorHex: '#D4AF37', colorNum: 0xD4AF37 },
+        { id: 'g_1', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'ff_1', file: 'flow_frame.stl', name: 'Flow Frame (Anode)', colorHex: '#E0E0E0', colorNum: 0xE0E0E0 },
+        { id: 'g_2', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'g_3', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'ff_2', file: 'flow_frame.stl', name: 'Flow Frame (Cathode)', colorHex: '#E0E0E0', colorNum: 0xE0E0E0 },
+        { id: 'g_4', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'bp_1', file: 'bipolar_cc.stl', name: 'Bipolar Plate', colorHex: '#222222', colorNum: 0x222222 },
+        { id: 'g_5', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'ff_3', file: 'flow_frame.stl', name: 'Flow Frame (Anode)', colorHex: '#E0E0E0', colorNum: 0xE0E0E0 },
+        { id: 'g_6', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'g_7', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'ff_4', file: 'flow_frame.stl', name: 'Flow Frame (Cathode)', colorHex: '#E0E0E0', colorNum: 0xE0E0E0 },
+        { id: 'ecc_2', file: 'endplate_cc.stl', name: 'Endplate CC', colorHex: '#D4AF37', colorNum: 0xD4AF37 },
+        { id: 'ep_2', file: 'end_plate.stl', name: 'End Plate (Top)', colorHex: '#757575', colorNum: 0x757575 }
+    ];
+
+    let loadedMeshes = [];
+    let currentSession = null;
+
+    document.getElementById('param-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('generate-btn').disabled = true;
+
+        const inputs = document.querySelectorAll('#param-form input, #param-form select');
+        const payload = {};
+        inputs.forEach(input => {
+            if(input.type === 'number') {
+                payload[input.id] = parseFloat(input.value);
+            } else {
+                payload[input.id] = input.value;
+            }
+        });
+
+        try {
+            const res = await fetch('/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            
+            if(data.status === 'success') {
+                currentSession = data.session_id;
+                document.getElementById('parts-list').style.display = 'block';
+                document.getElementById('explode-slider').value = 0;
+                document.getElementById('explode-val').innerText = '0';
+                
+                buildUI();
+                await loadAssembly();
+            }
+        } catch (err) {
+            alert("Error generating geometry. Check console.");
+            console.error(err);
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('generate-btn').disabled = false;
+        }
+    });
+
+    function buildUI() {
+        const container = document.getElementById('checkbox-container');
+        container.innerHTML = ''; 
+        
+        assemblySequence.forEach((part, index) => {
+            const label = document.createElement('label');
+            label.className = 'part-checkbox';
+            label.style.color = part.colorHex; 
+            
+            label.innerHTML = `
+                <input type="checkbox" value="${index}" checked>
+                ${part.name}
+            `;
+            
+            label.querySelector('input').addEventListener('change', (e) => {
+                if(loadedMeshes[index]) {
+                    loadedMeshes[index].visible = e.target.checked;
+                }
+            });
+            container.appendChild(label);
+        });
+    }
+
+    async function loadAssembly() {
+        loadedMeshes.forEach(mesh => scene.remove(mesh));
+        loadedMeshes = [];
+
+        const loader = new THREE.STLLoader();
+        const geometryCache = {};
+        
+        const loadGeom = (filename) => {
+            return new Promise((resolve) => {
+                if(geometryCache[filename]) {
+                    resolve(geometryCache[filename]);
+                } else {
+                    loader.load(`/download/${currentSession}/${filename}`, (geometry) => {
+                        geometry.center(); 
+                        geometryCache[filename] = geometry;
+                        resolve(geometry);
+                    });
+                }
+            });
+        };
+
+        const tabLength = parseFloat(document.getElementById('current_collector_tab_length').value) || 50.0;
+
+        for (let i = 0; i < assemblySequence.length; i++) {
+            const partInfo = assemblySequence[i];
+            const geometry = await loadGeom(partInfo.file);
+            
+            const material = new THREE.MeshStandardMaterial({ 
+                color: partInfo.colorNum, 
+                metalness: 0.2, 
+                roughness: 0.6,
+                side: THREE.DoubleSide 
+            });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            
+            // 1. Mirror top CC and every other flow frame along the Y-axis
+            // This flips the part top-to-bottom, keeping the tab on the same X-edge.
+            if (partInfo.id === 'ecc_2' || partInfo.id === 'ff_2' || partInfo.id === 'ff_4') {
+                mesh.scale.y = -1; 
+            }
+
+            // 2. Offset ONLY the endplate current collectors
+            if (partInfo.id === 'ecc_1' || partInfo.id === 'ecc_2') {
+                // Shift positively along the X-axis
+                mesh.position.x = (tabLength / 2);
+            }
+
+            mesh.userData.baseZ = i * 4; 
+            mesh.position.z = mesh.userData.baseZ;
+            
+            scene.add(mesh);
+            loadedMeshes.push(mesh);
+        }
+        
+        controls.target.set(0, 0, (assemblySequence.length * 4) / 2); 
+    }
+
+    document.getElementById('explode-slider').addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        document.getElementById('explode-val').innerText = val.toFixed(1);
+        
+        loadedMeshes.forEach((mesh, index) => {
+            mesh.position.z = mesh.userData.baseZ + (index * val);
+        });
+    });
+
+    // --- ZIP Download Logic ---
+    document.getElementById('download-btn').addEventListener('click', () => {
+        if (currentSession) {
+            // This triggers the browser to download the zip file from the new endpoint
+            window.location.href = `/download-zip/${currentSession}`;
+        } else {
+            alert("Please generate an assembly first.");
+        }
+    });
+</script>
+</body>
+</html>

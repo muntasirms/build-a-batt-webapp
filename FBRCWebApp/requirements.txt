@@ -47,7 +47,6 @@ Pygments==2.19.2
 pyparsing==3.2.4
 pyperclip==1.9.0
 python-dateutil==2.9.0.post0
-pywin32==311
 PyYAML==6.0.2
 pyzmq==27.1.0
 questionary==2.1.0

@@ -1,7 +1,7 @@
 anytree==2.13.0
 asttokens==3.0.0
 blinker==1.9.0
-build123d==0.9.1
+build123d==0.8.0
 cachetools==5.5.2
 cadquery-ocp==7.8.1.1.post1
 cadquery_vtk==9.3.1

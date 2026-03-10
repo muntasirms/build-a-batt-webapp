@@ -38,6 +38,15 @@ class CellParameters(BaseModel):
     current_collector_tab_length: float = 50.0
     current_collector_tab_width: float = 30.0
     current_collector_tab_hole_radius: float = 4.15
+    
+    endplate_z: float = 12.0
+    use_hose_barbs: bool = False
+    barb_total_height: float = 20.0
+    barb_inner_radius: float = 3.0
+    barb_stem_radius: float = 4.5
+    barb_outer_radius: float = 6.0
+    barb_count: int = 3
+    barb_base_fillet: float = 3.0
 
 @app.post("/generate")
 async def generate_cell(params: CellParameters):
@@ -47,47 +56,51 @@ async def generate_cell(params: CellParameters):
 
     gen = FlowCellGenerator(**params.dict())
 
-    # 1. Generate Base Parts
     flow_frame = gen.generate_flow_frame()
-    flow_field = gen.generate_flow_field() # Crucial for CFD STEP export
-    end_plate = gen.generate_end_plate(thickness=10.0)
+    flow_field = gen.generate_flow_field()
     
+    # 1. ALWAYS generate and export the flat end plate for the zip download
+    end_plate_flat = gen.generate_end_plate(thickness=params.endplate_z)
+    export_step(end_plate_flat, f"{temp_dir}/end_plate_flat.step")
+    export_stl(end_plate_flat, f"{temp_dir}/end_plate_flat.stl")
+    
+    # 2. Handle the Barbed logic
+    if params.use_hose_barbs:
+        end_plate_barbed = gen.generate_end_plate_with_barbs(thickness=params.endplate_z)
+        export_step(end_plate_barbed, f"{temp_dir}/end_plate_barbed.step")
+        export_stl(end_plate_barbed, f"{temp_dir}/end_plate_barbed.stl")
+        
+        # Save a duplicate named "end_plate.stl" so the frontend viewer loads the barbed version
+        export_stl(end_plate_barbed, f"{temp_dir}/end_plate.stl")
+    else:
+        # Save a duplicate named "end_plate.stl" so the frontend viewer loads the flat version
+        export_stl(end_plate_flat, f"{temp_dir}/end_plate.stl")
+        
     gasket_2d = gen.generate_gasket()
     endplate_cc_2d = gen.generate_current_collector()
     bipolar_cc_2d = gen.generate_bipolar_current_collector()
     end_plate_2d = gen.generate_end_plate_sketch()
 
-    # 2. Extrude 2D sketches for the 3D web viewer
     gasket_3d = extrude(gasket_2d, amount=1.0)
     endplate_cc_3d = extrude(endplate_cc_2d, amount=2.0)
     bipolar_cc_3d = extrude(bipolar_cc_2d, amount=3.0)
 
-    # 3. Export STLs (Used by web viewer and for 3D printing)
-    export_stl(end_plate, f"{temp_dir}/end_plate.stl")
+    # Export remaining STLs for the web viewer
     export_stl(endplate_cc_3d, f"{temp_dir}/endplate_cc.stl")
     export_stl(gasket_3d, f"{temp_dir}/gasket.stl")
     export_stl(flow_frame, f"{temp_dir}/flow_frame.stl")
     export_stl(bipolar_cc_3d, f"{temp_dir}/bipolar_cc.stl")
 
-    # 4. Export STEPs (For CNC milling and CFD Simulation)
+    # Export remaining STEPs for fluid simulation
     export_step(flow_frame, f"{temp_dir}/flow_frame.step")
     export_step(flow_field, f"{temp_dir}/flow_field_fluid_domain.step")
-    export_step(end_plate, f"{temp_dir}/end_plate.step")
 
-    # 5. Export DXFs (For Laser / Waterjet cutting)
-    
-
+    # Export 2D DXFs for laser/waterjet cutting
     for part_2d, name in zip([gasket_2d, endplate_cc_2d, bipolar_cc_2d, end_plate_2d], 
                            ["gasket", "endplate_cc", "bipolar_cc", "end_plate"]):
         export_dxf = ExportDXF()
         export_dxf.add_shape(part_2d)
         export_dxf.write(f"{temp_dir}/{name}.dxf")
-
-    
-    # export_dxf(gasket_2d, f"{temp_dir}/gasket.dxf")
-    # export_dxf(endplate_cc_2d, f"{temp_dir}/endplate_cc.dxf")
-    # export_dxf(bipolar_cc_2d, f"{temp_dir}/bipolar_cc.dxf")
-    # export_dxf(end_plate_2d, f"{temp_dir}/end_plate.dxf")
 
     return {
         "status": "success",
@@ -104,20 +117,13 @@ async def download_file(session_id: str, filename: str):
 
 @app.get("/download-zip/{session_id}")
 async def download_zip(session_id: str):
-    """Zips the entire session directory and returns it to the user."""
     dir_path = f"/tmp/{session_id}"
     if not os.path.exists(dir_path):
         return {"error": "Session directory not found"}
     
     zip_base_path = f"/tmp/{session_id}_build_a_batt"
-    # Create a zip archive of the directory
     shutil.make_archive(zip_base_path, 'zip', dir_path)
-    
-    return FileResponse(
-        f"{zip_base_path}.zip", 
-        media_type="application/zip", 
-        filename="Build_a_Batt_Manufacturing_Files.zip"
-    )
+    return FileResponse(f"{zip_base_path}.zip", media_type="application/zip", filename="Build_a_Batt_Manufacturing_Files.zip")
 
 @app.get("/")
 async def root():

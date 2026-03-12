@@ -6,4 +6,4 @@ dockerfilePath = "Dockerfile"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
-/src/folder1/railway.toml
+/BuildABattWebApp/railway.toml

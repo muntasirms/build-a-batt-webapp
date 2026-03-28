@@ -288,11 +288,17 @@
             const partInfo = assemblySequence[i];
             const geometry = await loadGeom(partInfo.file);
             
+            // Check if the part is a flow frame based on its ID
+            const isFlowFrame = partInfo.id.startsWith('ff');
+
             const material = new THREE.MeshStandardMaterial({ 
                 color: partInfo.colorNum, 
                 metalness: 0.2, 
                 roughness: 0.6,
-                side: THREE.DoubleSide 
+                side: THREE.DoubleSide,
+                // Apply transparency only to flow frames
+                transparent: isFlowFrame,
+                opacity: isFlowFrame ? 0.6 : 1.0 
             });
             
             const mesh = new THREE.Mesh(geometry, material);

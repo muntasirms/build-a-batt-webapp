@@ -14,7 +14,21 @@
         body { font-family: 'Segoe UI', system-ui, sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; background: var(--bg-main); color: var(--text-light); }
         
         #sidebar { width: 380px; padding: 25px; background: var(--bg-sidebar); overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.5); z-index: 10; }
-        h2 { margin-top: 0; color: var(--accent-green); font-weight: 600; }
+        
+        .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        h2 { margin: 0; color: var(--accent-green); font-weight: 600; }
+        
+        #toggle-json-btn { width: auto; padding: 5px 10px; margin: 0; font-size: 0.8em; background: transparent; border: 1px solid var(--accent-green); color: var(--accent-green); border-radius: 4px; cursor: pointer; }
+        #toggle-json-btn:hover { background: rgba(35, 177, 77, 0.1); }
+        
+        #json-import-section { display: none; margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px; border-left: 3px solid #D4AF37; }
+        #json-input { width: 100%; box-sizing: border-box; background: #222; color: #23B14D; border: 1px solid #555; font-family: monospace; font-size: 0.85em; padding: 8px; border-radius: 4px; resize: vertical; }
+        
+        .json-btn-group { display: flex; gap: 8px; margin-top: 8px; }
+        .json-action-btn { flex: 1; padding: 8px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; transition: filter 0.2s; }
+        .json-action-btn:hover { filter: brightness(1.1); }
+        #apply-json-btn { background: #D4AF37; color: #111; }
+        #export-json-btn { background: #555; color: white; }
         
         details { background: rgba(0, 0, 0, 0.2); margin-bottom: 10px; border-radius: 6px; border-left: 3px solid var(--accent-green); }
         summary { padding: 12px; cursor: pointer; font-weight: 600; user-select: none; }
@@ -26,8 +40,8 @@
         input[type="number"], input[type="text"], select { width: 100%; padding: 8px; box-sizing: border-box; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; }
         input[type="number"]:focus { outline: none; border-color: var(--accent-green); }
         
-        button { width: 100%; padding: 12px; background: var(--accent-green); color: white; border: none; border-radius: 6px; font-size: 1em; font-weight: bold; cursor: pointer; margin-top: 15px; transition: background 0.2s; }
-        button:hover { filter: brightness(1.1); }
+        button[type="submit"] { width: 100%; padding: 12px; background: var(--accent-green); color: white; border: none; border-radius: 6px; font-size: 1em; font-weight: bold; cursor: pointer; margin-top: 15px; transition: background 0.2s; }
+        button[type="submit"]:hover { filter: brightness(1.1); }
         input[type="range"] { width: 100%; margin: 10px 0; accent-color: var(--accent-green); }
         
         #viewer { flex-grow: 1; position: relative; }
@@ -44,7 +58,20 @@
 <body>
 
 <div id="sidebar">
-    <h2>Build a Batt</h2>
+    <div class="header-container">
+        <h2>Build a Batt</h2>
+        <button id="toggle-json-btn">{ } JSON</button>
+    </div>
+
+    <div id="json-import-section">
+        <label style="color: #f4f4f4; margin-bottom: 8px; display: block;">Configuration JSON:</label>
+        <textarea id="json-input" rows="8" placeholder='{"plate_x": 200, "plate_y": 200, "use_hose_barbs": true}'></textarea>
+        <div class="json-btn-group">
+            <button id="apply-json-btn" class="json-action-btn">Import & Generate</button>
+            <button id="export-json-btn" class="json-action-btn">Export & Copy</button>
+        </div>
+    </div>
+
     <form id="param-form">
         
         <details>
@@ -127,7 +154,7 @@
         
         <div class="checkbox-list" id="checkbox-container"></div>
         
-        <button id="download-btn" style="background: #222; border: 1px solid var(--accent-green); margin-top: 20px;">Download STL, STEP & DXF Files</button>
+        <button id="download-btn" style="background: #222; border: 1px solid var(--accent-green); margin-top: 20px; padding: 12px; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%;">Download STL, STEP & DXF Files</button>
     </div>
 </div>
 
@@ -136,8 +163,72 @@
 </div>
 
 <script>
+    // --- JSON Import/Export Logic ---
+    document.getElementById('toggle-json-btn').addEventListener('click', () => {
+        const section = document.getElementById('json-import-section');
+        section.style.display = section.style.display === 'none' ? 'block' : 'none';
+    });
+
+    document.getElementById('apply-json-btn').addEventListener('click', () => {
+        const jsonText = document.getElementById('json-input').value;
+        if (!jsonText.trim()) return;
+
+        try {
+            const data = JSON.parse(jsonText);
+            for (const [key, value] of Object.entries(data)) {
+                const el = document.getElementById(key);
+                if (el) {
+                    if (el.type === 'checkbox') {
+                        el.checked = value;
+                        el.dispatchEvent(new Event('change'));
+                    } else {
+                        el.value = value;
+                    }
+                }
+            }
+            document.getElementById('generate-btn').click();
+        } catch (e) {
+            alert("Invalid JSON format. Please ensure it is properly formatted.");
+            console.error(e);
+        }
+    });
+
+    document.getElementById('export-json-btn').addEventListener('click', () => {
+        const inputs = document.querySelectorAll('#param-form input, #param-form select');
+        const payload = {};
+        
+        inputs.forEach(input => {
+            if(input.id === 'explode-slider') return; // Ignore the UI view slider
+            
+            if(input.type === 'checkbox') {
+                payload[input.id] = input.checked;
+            } else if(input.type === 'number') {
+                payload[input.id] = parseFloat(input.value);
+            } else {
+                payload[input.id] = input.value;
+            }
+        });
+        
+        const jsonStr = JSON.stringify(payload, null, 4);
+        document.getElementById('json-input').value = jsonStr;
+        
+        // Copy to clipboard and provide visual feedback
+        navigator.clipboard.writeText(jsonStr).then(() => {
+            const btn = document.getElementById('export-json-btn');
+            const originalText = btn.innerText;
+            btn.innerText = "Copied!";
+            btn.style.background = "var(--accent-green)";
+            
+            setTimeout(() => {
+                btn.innerText = originalText;
+                btn.style.background = "#555";
+            }, 2000);
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+        });
+    });
+
     // --- UI Toggle Logic ---
-    // Placed right at the top of the script so it binds immediately
     document.getElementById('use_hose_barbs').addEventListener('change', (e) => {
         document.getElementById('barb-options').style.display = e.target.checked ? 'block' : 'none';
     });
@@ -203,6 +294,8 @@
         const payload = {};
         
         inputs.forEach(input => {
+            if(input.id === 'explode-slider') return;
+
             if(input.type === 'checkbox') {
                 payload[input.id] = input.checked;
             } else if(input.type === 'number') {
@@ -288,32 +381,34 @@
             const partInfo = assemblySequence[i];
             const geometry = await loadGeom(partInfo.file);
             
-            // Check if the part is a flow frame based on its ID
             const isFlowFrame = partInfo.id.startsWith('ff');
-
-            const material = new THREE.MeshStandardMaterial({ 
+            
+            // Upgraded to Physical Material for a "clear machined resin" look
+            const material = new THREE.MeshPhysicalMaterial({ 
                 color: partInfo.colorNum, 
-                metalness: 0.2, 
-                roughness: 0.6,
+                metalness: 0.1, 
+                // Lower roughness makes it glossy/clearer
+                roughness: isFlowFrame ? 0.2 : 0.6,
                 side: THREE.DoubleSide,
-                // Apply transparency only to flow frames
                 transparent: isFlowFrame,
-                opacity: isFlowFrame ? 0.6 : 1.0 
+                // Transmission handles optical transparency (glass-like) instead of just "fading" it
+                transmission: isFlowFrame ? 0.85 : 0.0, 
+                opacity: 1.0,
+                // depthWrite: false is the magic toggle to reveal internal void faces
+                depthWrite: !isFlowFrame 
+            });isFlowFrame ? 0.6 : 1.0 
             });
             
             const mesh = new THREE.Mesh(geometry, material);
             
-            // 1. Mirror top CC and every other flow frame along the Y-axis
             if (partInfo.id === 'ecc_2' || partInfo.id === 'ff_2' || partInfo.id === 'ff_4') {
                 mesh.scale.y = -1; 
             }
 
-            // 2. Offset ONLY the endplate current collectors in the +X direction
             if (partInfo.id === 'ecc_1' || partInfo.id === 'ecc_2') {
                 mesh.position.x = (tabLength / 2);
             }
             
-            // 3. Rotate the bottom endplate 180 degrees around the X-axis
             if (partInfo.id === 'ep_1') {
                 mesh.rotation.x = Math.PI; 
             }

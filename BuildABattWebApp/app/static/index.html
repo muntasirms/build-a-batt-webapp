@@ -36,7 +36,63 @@
         .details-content { padding: 15px; border-top: 1px solid rgba(255,255,255,0.1); }
         
         .form-group { margin-bottom: 12px; }
-        label { display: block; font-size: 0.85em; margin-bottom: 4px; color: #ccc; }
+
+        /* Label row: text + info badge side by side */
+        .label-row {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 4px;
+        }
+        .label-row label {
+            font-size: 0.85em;
+            color: #ccc;
+            margin: 0;
+            line-height: 1.2;
+        }
+
+        /* ── Info badge & tooltip ── */
+        .info-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            color: #aaa;
+            font-size: 9px;
+            font-weight: 700;
+            cursor: default;
+            flex-shrink: 0;
+            position: relative;
+            line-height: 1;
+            transition: background 0.15s, color 0.15s;
+        }
+        .info-badge:hover {
+            background: var(--accent-green);
+            color: #fff;
+        }
+
+        /* Tooltip bubble — rendered in a fixed overlay so it's never clipped */
+        #tooltip-bubble {
+            position: fixed;
+            z-index: 9999;
+            max-width: 240px;
+            background: #1a1a1a;
+            color: #e8e8e8;
+            font-size: 0.78em;
+            line-height: 1.5;
+            padding: 8px 11px;
+            border-radius: 6px;
+            border: 1px solid rgba(35,177,77,0.4);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        #tooltip-bubble.visible { opacity: 1; }
+
         input[type="number"], input[type="text"], select { width: 100%; padding: 8px; box-sizing: border-box; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; }
         input[type="number"]:focus { outline: none; border-color: var(--accent-green); }
         
@@ -50,12 +106,20 @@
         .checkbox-list { display: flex; flex-direction: column; gap: 8px; margin-top: 15px; }
         .part-checkbox { display: flex; align-items: center; gap: 8px; font-size: 0.9em; font-weight: 500;}
         .part-checkbox input { accent-color: var(--accent-green); cursor: pointer; }
+
+        /* Hose-barb toggle styling (preserve original) */
+        #use_hose_barbs-group { background: rgba(35, 177, 77, 0.1); padding: 10px; border-radius: 4px; border: 1px solid var(--accent-green); }
+        #use_hose_barbs-group .label-row label { font-weight: bold; color: white; cursor: pointer; font-size: 0.9em; }
+        #use_hose_barbs-group input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-green); }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
+
+<!-- Global tooltip bubble (one instance, repositioned by JS) -->
+<div id="tooltip-bubble"></div>
 
 <div id="sidebar">
     <div class="header-container">
@@ -73,73 +137,308 @@
     </div>
 
     <form id="param-form">
-        
+
+        <!-- ── Plate Dimensions ── -->
         <details>
             <summary>Plate Dimensions & Area</summary>
             <div class="details-content">
-                <div class="form-group"><label>Plate X (mm)</label><input type="number" step="0.1" id="plate_x" value="200.0"></div>
-                <div class="form-group"><label>Plate Y (mm)</label><input type="number" step="0.1" id="plate_y" value="200.0"></div>
-                <div class="form-group"><label>Flow Plate Z (mm)</label><input type="number" step="0.1" id="plate_z_flow" value="1.0"></div>
-                <div class="form-group"><label>Electrode X (mm)</label><input type="number" step="0.1" id="electrode_x" value="130.0"></div>
-                <div class="form-group"><label>Electrode Y (mm)</label><input type="number" step="0.1" id="electrode_y" value="130.0"></div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="plate_x">Plate X (mm)</label>
+                        <span class="info-badge" data-tip="Total outer width of every layer in the stack. All other components are sized relative to this dimension.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="plate_x" value="200.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="plate_y">Plate Y (mm)</label>
+                        <span class="info-badge" data-tip="Total outer height of every layer in the stack. All other components are sized relative to this dimension.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="plate_y" value="200.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="plate_z_flow">Flow Plate Z (mm)</label>
+                        <span class="info-badge" data-tip="Thickness of the flow frame. This sets the channel depth available for electrolyte and the compression thickness of the electrode.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="plate_z_flow" value="1.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="electrode_x">Electrode X (mm)</label>
+                        <span class="info-badge" data-tip="Width of the active electrode area cut out of the flow frame. The flow channels fill this opening.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="electrode_x" value="130.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="electrode_y">Electrode Y (mm)</label>
+                        <span class="info-badge" data-tip="Height of the active electrode area cut out of the flow frame. The flow channels fill this opening.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="electrode_y" value="130.0">
+                </div>
+
             </div>
         </details>
 
+        <!-- ── Manifolds & Channels ── -->
         <details>
             <summary>Manifolds & Channels</summary>
             <div class="details-content">
-                <div class="form-group"><label>Wall Thickness (mm)</label><input type="number" step="0.1" id="manifold_wall_thickness" value="0.0"></div>
-                <div class="form-group"><label>Manifold Max Width (mm)</label><input type="number" step="0.1" id="manifold_max_width" value="15.0"></div>
-                <div class="form-group"><label>Manifold Min Width (mm)</label><input type="number" step="0.1" id="manifold_min_width" value="10.0"></div>
-                <div class="form-group"><label>Distribution Length (mm)</label><input type="number" step="0.1" id="distribution_length" value="0.0"></div>
-                <div class="form-group"><label>Growth Rate</label><input type="number" step="0.01" id="distribution_growth_rate" value="0.05"></div>
-                <div class="form-group"><label>Rib Thickness (mm)</label><input type="number" step="0.1" id="rib_thickness" value="1.0"></div>
-                <div class="form-group"><label>Distribution Pattern</label>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="manifold_wall_thickness">Wall Thickness (mm)</label>
+                        <span class="info-badge" data-tip="Thickness of material left above and below the flow channels (the floor/ceiling). Set to 0 for fully open channels that punch through the entire plate thickness.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="manifold_wall_thickness" value="0.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="manifold_max_width">Manifold Max Width (mm)</label>
+                        <span class="info-badge" data-tip="Widest dimension of the tapered inlet/outlet manifold, measured at the corner furthest from the electrode. A wider manifold reduces inlet velocity and improves flow distribution.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="manifold_max_width" value="15.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="manifold_min_width">Manifold Min Width (mm)</label>
+                        <span class="info-badge" data-tip="Narrowest dimension of the tapered manifold, at the edge closest to the electrode. The taper from max to min width helps direct flow evenly across the electrode width.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="manifold_min_width" value="10.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="distribution_length">Distribution Length (mm)</label>
+                        <span class="info-badge" data-tip="Extra length added to the inlet and outlet fingers beyond the electrode boundary. Increasing this extends the fingers further into the manifold zone for better flow spreading. Set to 0 to disable.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="distribution_length" value="0.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="distribution_growth_rate">Growth Rate</label>
+                        <span class="info-badge" data-tip="Controls how quickly channel gap widths increase from the narrow inlet side to the wider outlet side. Higher values create more aggressive tapering. Typical range: 0.02–0.15.">i</span>
+                    </div>
+                    <input type="number" step="0.01" id="distribution_growth_rate" value="0.05">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="rib_thickness">Rib Thickness (mm)</label>
+                        <span class="info-badge" data-tip="Width of the solid ribs that separate adjacent flow channels. Thinner ribs increase active area but reduce structural rigidity and electrode support.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="rib_thickness" value="1.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="distribution_pattern">Distribution Pattern</label>
+                        <span class="info-badge" data-tip="Math function used to space channel gaps from inlet to outlet. 'Exponential' gives the smoothest pressure gradient; 'Arithmetic' is linear; 'Power' is intermediate.">i</span>
+                    </div>
                     <select id="distribution_pattern">
                         <option value="exp" selected>Exponential</option>
                         <option value="arith">Arithmetic</option>
                         <option value="power">Power</option>
                     </select>
                 </div>
+
             </div>
         </details>
 
+        <!-- ── Hardware & Ports ── -->
         <details open>
             <summary>Hardware & Ports</summary>
             <div class="details-content">
-                <div class="form-group"><label>Liquid Port Diameter (mm)</label><input type="number" step="0.1" id="liquid_port_diameter" value="10.0"></div>
-                <div class="form-group"><label>Port Inset Ratio</label><input type="number" step="0.01" id="port_inset_ratio" value="0.125"></div>
-                <div class="form-group"><label>Bolts Per Side</label><input type="number" id="bolts_per_side" value="3"></div>
-                <div class="form-group"><label>Bolt Diameter (mm)</label><input type="number" step="0.1" id="bolt_diameter" value="6.3"></div>
-                <div class="form-group"><label>Fillet Ratio</label><input type="number" step="0.01" id="fillet_ratio" value="0.04"></div>
-                
-                <div class="form-group"><label>Endplate Z (Thickness) (mm)</label><input type="number" step="0.1" id="endplate_z" value="12.0"></div>
-                <div class="form-group"><label>Endplate X Offset (mm)</label><input type="number" step="0.1" id="endplate_x_offset" value="20.0"></div>
-                <div class="form-group"><label>Endplate Y Offset (mm)</label><input type="number" step="0.1" id="endplate_y_offset" value="20.0"></div>
-                <div class="form-group"><label>Gasket X Offset (mm)</label><input type="number" step="0.1" id="gasket_x_offset" value="0.0"></div>
-                <div class="form-group"><label>Gasket Y Offset (mm)</label><input type="number" step="0.1" id="gasket_y_offset" value="0.0"></div>
-                <div class="form-group"><label>CC X Offset (mm)</label><input type="number" step="0.1" id="current_collector_x_offset" value="0.0"></div>
-                <div class="form-group"><label>CC Y Offset (mm)</label><input type="number" step="0.1" id="current_collector_y_offset" value="0.0"></div>
-                <div class="form-group"><label>CC Tab Length (mm)</label><input type="number" step="0.1" id="current_collector_tab_length" value="50.0"></div>
-                <div class="form-group"><label>CC Tab Width (mm)</label><input type="number" step="0.1" id="current_collector_tab_width" value="30.0"></div>
-                <div class="form-group"><label>CC Tab Hole Radius (mm)</label><input type="number" step="0.1" id="current_collector_tab_hole_radius" value="4.15"></div>
-                
-                <hr style="border-color: #555; margin: 20px 0;">
-                
-                <div class="form-group" style="background: rgba(35, 177, 77, 0.1); padding: 10px; border-radius: 4px; border: 1px solid var(--accent-green);">
-                    <label style="display: flex; align-items: center; gap: 10px; font-weight: bold; color: white; margin: 0; cursor: pointer;">
-                        <input type="checkbox" id="use_hose_barbs" style="width: 18px; height: 18px; cursor: pointer;">
-                        Generate Integrated Hose Barbs
-                    </label>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="liquid_port_diameter">Liquid Port Diameter (mm)</label>
+                        <span class="info-badge" data-tip="Diameter of the circular inlet and outlet fluid ports. Size to match your tubing OD or fitting thread. Ports appear at all four corners and are cut through every layer.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="liquid_port_diameter" value="10.0">
                 </div>
-                
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="port_inset_ratio">Port Inset Ratio</label>
+                        <span class="info-badge" data-tip="Fractional distance from the plate edge to the port center, as a proportion of plate size. 0.125 places ports 12.5% in from each corner. Increase to move ports further from the edge.">i</span>
+                    </div>
+                    <input type="number" step="0.01" id="port_inset_ratio" value="0.125">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="bolts_per_side">Bolts Per Side</label>
+                        <span class="info-badge" data-tip="Number of bolt holes evenly spaced along each of the four plate edges. More bolts improve clamping uniformity but increase assembly time. Bolt holes are cut through every layer.">i</span>
+                    </div>
+                    <input type="number" id="bolts_per_side" value="3">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="bolt_diameter">Bolt Diameter (mm)</label>
+                        <span class="info-badge" data-tip="Clearance hole diameter for the clamping bolts. Set slightly larger than your bolt's nominal diameter (e.g. 6.3 mm for an M6 bolt) to allow easy assembly.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="bolt_diameter" value="6.3">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="fillet_ratio">Fillet Ratio</label>
+                        <span class="info-badge" data-tip="Corner fillet radius expressed as a fraction of the shorter plate dimension. 0.04 on a 200 mm plate gives an 8 mm radius. Larger values round the corners more aggressively.">i</span>
+                    </div>
+                    <input type="number" step="0.01" id="fillet_ratio" value="0.04">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="endplate_z">Endplate Z (Thickness) (mm)</label>
+                        <span class="info-badge" data-tip="Thickness of the rigid end plates at the top and bottom of the stack. Thicker plates resist bowing under clamping load. Typical values: 10–20 mm for aluminium, 15–25 mm for acrylic.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="endplate_z" value="12.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="endplate_x_offset">Endplate X Offset (mm)</label>
+                        <span class="info-badge" data-tip="How much wider the end plate is than the flow frame, in the X direction (total, not per side). This border accommodates the bolt pattern and provides extra clamping area.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="endplate_x_offset" value="20.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="endplate_y_offset">Endplate Y Offset (mm)</label>
+                        <span class="info-badge" data-tip="How much taller the end plate is than the flow frame, in the Y direction (total, not per side).">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="endplate_y_offset" value="20.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="gasket_x_offset">Gasket X Offset (mm)</label>
+                        <span class="info-badge" data-tip="Size difference between the gasket outer boundary and the flow frame, in X. A positive value makes the gasket slightly larger than the frame for better sealing coverage. Often left at 0.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="gasket_x_offset" value="0.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="gasket_y_offset">Gasket Y Offset (mm)</label>
+                        <span class="info-badge" data-tip="Size difference between the gasket outer boundary and the flow frame, in Y.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="gasket_y_offset" value="0.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="current_collector_x_offset">CC X Offset (mm)</label>
+                        <span class="info-badge" data-tip="Size difference between the current collector outer boundary and the flow frame, in X. Adjusts how far the collector sheet extends beyond the frame edge.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="current_collector_x_offset" value="0.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="current_collector_y_offset">CC Y Offset (mm)</label>
+                        <span class="info-badge" data-tip="Size difference between the current collector outer boundary and the flow frame, in Y.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="current_collector_y_offset" value="0.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="current_collector_tab_length">CC Tab Length (mm)</label>
+                        <span class="info-badge" data-tip="Length of the protruding tab on the current collector used for external electrical connections. The tab extends beyond the plate edge.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="current_collector_tab_length" value="50.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="current_collector_tab_width">CC Tab Width (mm)</label>
+                        <span class="info-badge" data-tip="Width of the current collector tab. Should be wide enough to handle the expected current density without excessive resistive heating.">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="current_collector_tab_width" value="30.0">
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row">
+                        <label for="current_collector_tab_hole_radius">CC Tab Hole Radius (mm)</label>
+                        <span class="info-badge" data-tip="Radius of the connection hole punched in the current collector tab. Size to fit your terminal bolt or lug (e.g. 4.15 mm for an M8 lug).">i</span>
+                    </div>
+                    <input type="number" step="0.1" id="current_collector_tab_hole_radius" value="4.15">
+                </div>
+
+                <hr style="border-color: #555; margin: 20px 0;">
+
+                <div class="form-group" id="use_hose_barbs-group">
+                    <div class="label-row">
+                        <input type="checkbox" id="use_hose_barbs">
+                        <label for="use_hose_barbs">Generate Integrated Hose Barbs</label>
+                        <span class="info-badge" data-tip="When enabled, the two top-side fluid ports on the end plate are replaced with integrated barbed fittings machined directly into the plate. The bottom two ports become solid plugs. Size the barb parameters to match your tubing ID.">i</span>
+                    </div>
+                </div>
+
                 <div id="barb-options" style="display: none; margin-top: 15px;">
-                    <div class="form-group"><label>Barb Height (mm)</label><input type="number" step="0.1" id="barb_total_height" value="20.0"></div>
-                    <div class="form-group"><label>Barb Inner Radius (mm)</label><input type="number" step="0.1" id="barb_inner_radius" value="3.0"></div>
-                    <div class="form-group"><label>Barb Stem Radius (mm)</label><input type="number" step="0.1" id="barb_stem_radius" value="4.5"></div>
-                    <div class="form-group"><label>Barb Outer Radius (mm)</label><input type="number" step="0.1" id="barb_outer_radius" value="6.0"></div>
-                    <div class="form-group"><label>Barb Count</label><input type="number" id="barb_count" value="3"></div>
-                    <div class="form-group"><label>Barb Base Fillet (mm)</label><input type="number" step="0.1" id="barb_base_fillet" value="3.0"></div>
+
+                    <div class="form-group">
+                        <div class="label-row">
+                            <label for="barb_total_height">Barb Height (mm)</label>
+                            <span class="info-badge" data-tip="Total height of the barb fitting measured from the end plate surface to the tip. Must be tall enough to fully seat your hose.">i</span>
+                        </div>
+                        <input type="number" step="0.1" id="barb_total_height" value="20.0">
+                    </div>
+
+                    <div class="form-group">
+                        <div class="label-row">
+                            <label for="barb_inner_radius">Barb Inner Radius (mm)</label>
+                            <span class="info-badge" data-tip="Radius of the through-bore inside the barb fitting. Match this to the inner diameter of your tubing for a snug fit.">i</span>
+                        </div>
+                        <input type="number" step="0.1" id="barb_inner_radius" value="3.0">
+                    </div>
+
+                    <div class="form-group">
+                        <div class="label-row">
+                            <label for="barb_stem_radius">Barb Stem Radius (mm)</label>
+                            <span class="info-badge" data-tip="Radius of the cylindrical stem that the hose slides over. Should be slightly larger than the tubing's inner radius to create an interference fit.">i</span>
+                        </div>
+                        <input type="number" step="0.1" id="barb_stem_radius" value="4.5">
+                    </div>
+
+                    <div class="form-group">
+                        <div class="label-row">
+                            <label for="barb_outer_radius">Barb Outer Radius (mm)</label>
+                            <span class="info-badge" data-tip="Radius of the flanged barb rings that grip the inside of the tubing and resist pull-out. Should exceed the stem radius by at least 1–2 mm.">i</span>
+                        </div>
+                        <input type="number" step="0.1" id="barb_outer_radius" value="6.0">
+                    </div>
+
+                    <div class="form-group">
+                        <div class="label-row">
+                            <label for="barb_count">Barb Count</label>
+                            <span class="info-badge" data-tip="Number of gripping flanges distributed along the barb fitting height. More barbs improve pull-out resistance but require more insertion force.">i</span>
+                        </div>
+                        <input type="number" id="barb_count" value="3">
+                    </div>
+
+                    <div class="form-group">
+                        <div class="label-row">
+                            <label for="barb_base_fillet">Barb Base Fillet (mm)</label>
+                            <span class="info-badge" data-tip="Radius of the fillet blending the base of the barb fitting into the end plate surface. Reduces stress concentration and improves appearance.">i</span>
+                        </div>
+                        <input type="number" step="0.1" id="barb_base_fillet" value="3.0">
+                    </div>
+
                 </div>
             </div>
         </details>
@@ -163,7 +462,36 @@
 </div>
 
 <script>
-    // --- JSON Import/Export Logic ---
+    // ── Tooltip logic ──────────────────────────────────────────────────────────
+    const bubble = document.getElementById('tooltip-bubble');
+    let hideTimer = null;
+
+    document.querySelectorAll('.info-badge[data-tip]').forEach(badge => {
+        badge.addEventListener('mouseenter', (e) => {
+            clearTimeout(hideTimer);
+            bubble.textContent = badge.dataset.tip;
+            bubble.classList.add('visible');
+            positionBubble(e);
+        });
+        badge.addEventListener('mousemove', positionBubble);
+        badge.addEventListener('mouseleave', () => {
+            hideTimer = setTimeout(() => bubble.classList.remove('visible'), 80);
+        });
+    });
+
+    function positionBubble(e) {
+        const GAP = 10;
+        const bw = 240, bh = 80; // approx bubble size
+        let x = e.clientX + GAP;
+        let y = e.clientY + GAP;
+        // Keep inside viewport
+        if (x + bw > window.innerWidth)  x = e.clientX - bw - GAP;
+        if (y + bh > window.innerHeight) y = e.clientY - bh - GAP;
+        bubble.style.left = x + 'px';
+        bubble.style.top  = y + 'px';
+    }
+
+    // ── JSON Import/Export Logic ───────────────────────────────────────────────
     document.getElementById('toggle-json-btn').addEventListener('click', () => {
         const section = document.getElementById('json-import-section');
         section.style.display = section.style.display === 'none' ? 'block' : 'none';
@@ -172,7 +500,6 @@
     document.getElementById('apply-json-btn').addEventListener('click', () => {
         const jsonText = document.getElementById('json-input').value;
         if (!jsonText.trim()) return;
-
         try {
             const data = JSON.parse(jsonText);
             for (const [key, value] of Object.entries(data)) {
@@ -196,44 +523,29 @@
     document.getElementById('export-json-btn').addEventListener('click', () => {
         const inputs = document.querySelectorAll('#param-form input, #param-form select');
         const payload = {};
-        
         inputs.forEach(input => {
-            if(input.id === 'explode-slider') return; // Ignore the UI view slider
-            
-            if(input.type === 'checkbox') {
-                payload[input.id] = input.checked;
-            } else if(input.type === 'number') {
-                payload[input.id] = parseFloat(input.value);
-            } else {
-                payload[input.id] = input.value;
-            }
+            if(input.id === 'explode-slider') return;
+            if(input.type === 'checkbox') payload[input.id] = input.checked;
+            else if(input.type === 'number') payload[input.id] = parseFloat(input.value);
+            else payload[input.id] = input.value;
         });
-        
         const jsonStr = JSON.stringify(payload, null, 4);
         document.getElementById('json-input').value = jsonStr;
-        
-        // Copy to clipboard and provide visual feedback
         navigator.clipboard.writeText(jsonStr).then(() => {
             const btn = document.getElementById('export-json-btn');
             const originalText = btn.innerText;
             btn.innerText = "Copied!";
             btn.style.background = "var(--accent-green)";
-            
-            setTimeout(() => {
-                btn.innerText = originalText;
-                btn.style.background = "#555";
-            }, 2000);
-        }).catch(err => {
-            console.error('Failed to copy: ', err);
-        });
+            setTimeout(() => { btn.innerText = originalText; btn.style.background = "#555"; }, 2000);
+        }).catch(err => console.error('Failed to copy: ', err));
     });
 
-    // --- UI Toggle Logic ---
+    // ── UI Toggle Logic ────────────────────────────────────────────────────────
     document.getElementById('use_hose_barbs').addEventListener('change', (e) => {
         document.getElementById('barb-options').style.display = e.target.checked ? 'block' : 'none';
     });
 
-    // --- Three.js Setup ---
+    // ── Three.js Setup ─────────────────────────────────────────────────────────
     const scene = new THREE.Scene();
     scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -241,7 +553,7 @@
     scene.add(dirLight);
 
     const camera = new THREE.PerspectiveCamera(60, (window.innerWidth - 380) / window.innerHeight, 0.1, 2000);
-    camera.position.set(-300, -300, 400); 
+    camera.position.set(-300, -300, 400);
     camera.up.set(0, 0, 1);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -249,7 +561,7 @@
     document.getElementById('viewer').appendChild(renderer.domElement);
 
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    
+
     window.addEventListener('resize', () => {
         camera.aspect = (window.innerWidth - 380) / window.innerHeight;
         camera.updateProjectionMatrix();
@@ -264,22 +576,22 @@
     animate();
 
     const assemblySequence = [
-        { id: 'ep_1', file: 'end_plate.stl', name: 'End Plate (Bottom)', colorHex: '#757575', colorNum: 0x757575 },
-        { id: 'ecc_1', file: 'endplate_cc.stl', name: 'Endplate CC', colorHex: '#D4AF37', colorNum: 0xD4AF37 },
-        { id: 'g_1', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
-        { id: 'ff_1', file: 'flow_frame.stl', name: 'Flow Frame (Anode)', colorHex: '#E0E0E0', colorNum: 0xE0E0E0 },
-        { id: 'g_2', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
-        { id: 'g_3', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
-        { id: 'ff_2', file: 'flow_frame.stl', name: 'Flow Frame (Cathode)', colorHex: '#E0E0E0', colorNum: 0xE0E0E0 },
-        { id: 'g_4', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
-        { id: 'bp_1', file: 'bipolar_cc.stl', name: 'Bipolar Plate', colorHex: '#222222', colorNum: 0x222222 },
-        { id: 'g_5', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
-        { id: 'ff_3', file: 'flow_frame.stl', name: 'Flow Frame (Anode)', colorHex: '#E0E0E0', colorNum: 0xE0E0E0 },
-        { id: 'g_6', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
-        { id: 'g_7', file: 'gasket.stl', name: 'Gasket', colorHex: '#23B14D', colorNum: 0x23B14D },
-        { id: 'ff_4', file: 'flow_frame.stl', name: 'Flow Frame (Cathode)', colorHex: '#E0E0E0', colorNum: 0xE0E0E0 },
-        { id: 'ecc_2', file: 'endplate_cc.stl', name: 'Endplate CC', colorHex: '#D4AF37', colorNum: 0xD4AF37 },
-        { id: 'ep_2', file: 'end_plate.stl', name: 'End Plate (Top)', colorHex: '#757575', colorNum: 0x757575 }
+        { id: 'ep_1',  file: 'end_plate.stl',   name: 'End Plate (Bottom)', colorHex: '#757575', colorNum: 0x757575 },
+        { id: 'ecc_1', file: 'endplate_cc.stl',  name: 'Endplate CC',        colorHex: '#D4AF37', colorNum: 0xD4AF37 },
+        { id: 'g_1',   file: 'gasket.stl',       name: 'Gasket',             colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'ff_1',  file: 'flow_frame.stl',   name: 'Flow Frame (Anode)', colorHex: '#E0E0E0', colorNum: 0xE0E0E0 },
+        { id: 'g_2',   file: 'gasket.stl',       name: 'Gasket',             colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'g_3',   file: 'gasket.stl',       name: 'Gasket',             colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'ff_2',  file: 'flow_frame.stl',   name: 'Flow Frame (Cathode)', colorHex: '#E0E0E0', colorNum: 0xE0E0E0 },
+        { id: 'g_4',   file: 'gasket.stl',       name: 'Gasket',             colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'bp_1',  file: 'bipolar_cc.stl',   name: 'Bipolar Plate',      colorHex: '#222222', colorNum: 0x222222 },
+        { id: 'g_5',   file: 'gasket.stl',       name: 'Gasket',             colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'ff_3',  file: 'flow_frame.stl',   name: 'Flow Frame (Anode)', colorHex: '#E0E0E0', colorNum: 0xE0E0E0 },
+        { id: 'g_6',   file: 'gasket.stl',       name: 'Gasket',             colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'g_7',   file: 'gasket.stl',       name: 'Gasket',             colorHex: '#23B14D', colorNum: 0x23B14D },
+        { id: 'ff_4',  file: 'flow_frame.stl',   name: 'Flow Frame (Cathode)', colorHex: '#E0E0E0', colorNum: 0xE0E0E0 },
+        { id: 'ecc_2', file: 'endplate_cc.stl',  name: 'Endplate CC',        colorHex: '#D4AF37', colorNum: 0xD4AF37 },
+        { id: 'ep_2',  file: 'end_plate.stl',    name: 'End Plate (Top)',    colorHex: '#757575', colorNum: 0x757575 }
     ];
 
     let loadedMeshes = [];
@@ -292,17 +604,11 @@
 
         const inputs = document.querySelectorAll('#param-form input, #param-form select');
         const payload = {};
-        
         inputs.forEach(input => {
             if(input.id === 'explode-slider') return;
-
-            if(input.type === 'checkbox') {
-                payload[input.id] = input.checked;
-            } else if(input.type === 'number') {
-                payload[input.id] = parseFloat(input.value);
-            } else {
-                payload[input.id] = input.value;
-            }
+            if(input.type === 'checkbox') payload[input.id] = input.checked;
+            else if(input.type === 'number') payload[input.id] = parseFloat(input.value);
+            else payload[input.id] = input.value;
         });
 
         try {
@@ -312,13 +618,11 @@
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
-            
             if(data.status === 'success') {
                 currentSession = data.session_id;
                 document.getElementById('parts-list').style.display = 'block';
                 document.getElementById('explode-slider').value = 0;
                 document.getElementById('explode-val').innerText = '0';
-                
                 buildUI();
                 await loadAssembly();
             }
@@ -333,22 +637,14 @@
 
     function buildUI() {
         const container = document.getElementById('checkbox-container');
-        container.innerHTML = ''; 
-        
+        container.innerHTML = '';
         assemblySequence.forEach((part, index) => {
             const label = document.createElement('label');
             label.className = 'part-checkbox';
-            label.style.color = part.colorHex; 
-            
-            label.innerHTML = `
-                <input type="checkbox" value="${index}" checked>
-                ${part.name}
-            `;
-            
+            label.style.color = part.colorHex;
+            label.innerHTML = `<input type="checkbox" value="${index}" checked>${part.name}`;
             label.querySelector('input').addEventListener('change', (e) => {
-                if(loadedMeshes[index]) {
-                    loadedMeshes[index].visible = e.target.checked;
-                }
+                if(loadedMeshes[index]) loadedMeshes[index].visible = e.target.checked;
             });
             container.appendChild(label);
         });
@@ -360,79 +656,55 @@
 
         const loader = new THREE.STLLoader();
         const geometryCache = {};
-        
-        const loadGeom = (filename) => {
-            return new Promise((resolve) => {
-                if(geometryCache[filename]) {
-                    resolve(geometryCache[filename]);
-                } else {
-                    loader.load(`/download/${currentSession}/${filename}`, (geometry) => {
-                        geometry.center(); 
-                        geometryCache[filename] = geometry;
-                        resolve(geometry);
-                    });
-                }
+
+        const loadGeom = (filename) => new Promise((resolve) => {
+            if(geometryCache[filename]) { resolve(geometryCache[filename]); return; }
+            loader.load(`/download/${currentSession}/${filename}`, (geometry) => {
+                geometry.center();
+                geometryCache[filename] = geometry;
+                resolve(geometry);
             });
-        };
+        });
 
         const tabLength = parseFloat(document.getElementById('current_collector_tab_length').value) || 50.0;
 
         for (let i = 0; i < assemblySequence.length; i++) {
             const partInfo = assemblySequence[i];
             const geometry = await loadGeom(partInfo.file);
-            
             const isFlowFrame = partInfo.id.startsWith('ff');
-            
-            const material = new THREE.MeshPhysicalMaterial({ 
-                color: partInfo.colorNum, 
-                metalness: 0.1, 
+            const material = new THREE.MeshPhysicalMaterial({
+                color: partInfo.colorNum,
+                metalness: 0.1,
                 roughness: isFlowFrame ? 0.2 : 0.6,
                 side: THREE.DoubleSide,
                 transparent: isFlowFrame,
-                transmission: isFlowFrame ? 0.85 : 0.0, 
+                transmission: isFlowFrame ? 0.85 : 0.0,
                 opacity: 1.0,
-                depthWrite: !isFlowFrame 
+                depthWrite: !isFlowFrame
             });
-            
             const mesh = new THREE.Mesh(geometry, material);
-            
-            if (partInfo.id === 'ecc_2' || partInfo.id === 'ff_2' || partInfo.id === 'ff_4') {
-                mesh.scale.y = -1; 
-            }
-
-            if (partInfo.id === 'ecc_1' || partInfo.id === 'ecc_2') {
-                mesh.position.x = (tabLength / 2);
-            }
-            
-            if (partInfo.id === 'ep_1') {
-                mesh.rotation.x = Math.PI; 
-            }
-
-            mesh.userData.baseZ = i * 4; 
+            if (partInfo.id === 'ecc_2' || partInfo.id === 'ff_2' || partInfo.id === 'ff_4') mesh.scale.y = -1;
+            if (partInfo.id === 'ecc_1' || partInfo.id === 'ecc_2') mesh.position.x = (tabLength / 2);
+            if (partInfo.id === 'ep_1') mesh.rotation.x = Math.PI;
+            mesh.userData.baseZ = i * 4;
             mesh.position.z = mesh.userData.baseZ;
-            
             scene.add(mesh);
             loadedMeshes.push(mesh);
         }
-        
-        controls.target.set(0, 0, (assemblySequence.length * 4) / 2); 
+        controls.target.set(0, 0, (assemblySequence.length * 4) / 2);
     }
 
     document.getElementById('explode-slider').addEventListener('input', (e) => {
         const val = parseFloat(e.target.value);
         document.getElementById('explode-val').innerText = val.toFixed(1);
-        
         loadedMeshes.forEach((mesh, index) => {
             mesh.position.z = mesh.userData.baseZ + (index * val);
         });
     });
 
     document.getElementById('download-btn').addEventListener('click', () => {
-        if (currentSession) {
-            window.location.href = `/download-zip/${currentSession}`;
-        } else {
-            alert("Please generate an assembly first.");
-        }
+        if (currentSession) window.location.href = `/download-zip/${currentSession}`;
+        else alert("Please generate an assembly first.");
     });
 </script>
 </body>

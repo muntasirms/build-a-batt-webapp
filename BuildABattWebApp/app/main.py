@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from app.generator import FlowCellGenerator
+from generator import FlowCellGenerator
 from build123d import export_stl, export_step, ExportDXF, extrude
 
 app = FastAPI(title="Build a Batt API")
